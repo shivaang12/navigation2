@@ -390,19 +390,24 @@ Costmap2DROS::mapUpdateLoop(double frequency)
     timer.end();
 
     RCLCPP_DEBUG(get_logger(), "Map update time: %.9f", timer.elapsed_time_in_seconds());
-    if (publish_cycle_ > rclcpp::Duration(0) && layered_costmap_->isInitialized()) {
-      unsigned int x0, y0, xn, yn;
-      layered_costmap_->getBounds(&x0, &xn, &y0, &yn);
-      costmap_publisher_->updateBounds(x0, xn, y0, yn);
+    // Only publish when subscription available
+    if(this->count_subscribers("costmap_raw") > 0){
+      if (publish_cycle_ > rclcpp::Duration(0) && layered_costmap_->isInitialized()) {
+        unsigned int x0, y0, xn, yn;
+        layered_costmap_->getBounds(&x0, &xn, &y0, &yn);
+        costmap_publisher_->updateBounds(x0, xn, y0, yn);
 
-      auto current_time = now();
-      if ((last_publish_ + publish_cycle_ < current_time) ||  // publish_cycle_ is due
-        (current_time < last_publish_))      // time has moved backwards, probably due to a switch to sim_time // NOLINT
-      {
-        RCLCPP_DEBUG(get_logger(), "Publish costmap at %s", name_.c_str());
-        costmap_publisher_->publishCostmap();
-        last_publish_ = current_time;
+        auto current_time = now();
+        if ((last_publish_ + publish_cycle_ < current_time) ||  // publish_cycle_ is due
+          (current_time < last_publish_))      // time has moved backwards, probably due to a switch to sim_time // NOLINT
+        {
+          RCLCPP_DEBUG(get_logger(), "Publish costmap at %s", name_.c_str());
+          costmap_publisher_->publishCostmap();
+          last_publish_ = current_time;
+        }
       }
+    } else {
+      RCLCPP_DEBUG(get_logger(),"Not publishing costmap_raw as no subscribers found!")
     }
 
     // Make sure to sleep for the remainder of our cycle time
