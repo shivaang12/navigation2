@@ -20,6 +20,7 @@
 
 #include "behaviortree_cpp_v3/action_node.h"
 #include "nav2_util/node_utils.hpp"
+#include "nav2_util/lifecycle_node.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 
 namespace nav2_behavior_tree
@@ -35,7 +36,7 @@ public:
     const BT::NodeConfiguration & conf)
   : BT::ActionNodeBase(xml_tag_name, conf), action_name_(action_name)
   {
-    node_ = config().blackboard->get<rclcpp::Node::SharedPtr>("node");
+    node_ = config().blackboard->get<rclcpp_lifecycle::LifecycleNode::SharedPtr>("node");
 
     // Initialize the input and output messages
     goal_ = typename ActionT::Goal();
@@ -148,7 +149,7 @@ public:
         on_new_goal_received();
       }
 
-      rclcpp::spin_some(node_);
+      // rclcpp::spin_some(node_);
 
       // check if, after invoking spin_some(), we finally received the result
       if (!goal_result_available_) {
@@ -178,13 +179,14 @@ public:
   {
     if (should_cancel_goal()) {
       auto future_cancel = action_client_->async_cancel_goal(goal_handle_);
-      if (rclcpp::spin_until_future_complete(node_, future_cancel) !=
-        rclcpp::FutureReturnCode::SUCCESS)
-      {
-        RCLCPP_ERROR(
-          node_->get_logger(),
-          "Failed to cancel action server for %s", action_name_.c_str());
-      }
+      // if (rclcpp::spin_until_future_complete(node_, future_cancel) !=
+      //   rclcpp::FutureReturnCode::SUCCESS)
+      // {
+      //   RCLCPP_ERROR(
+      //     node_->get_logger(),
+      //     "Failed to cancel action server for %s", action_name_.c_str());
+      // }
+      future_cancel.wait();
     }
 
     setStatus(BT::NodeStatus::IDLE);
@@ -198,7 +200,7 @@ protected:
       return false;
     }
 
-    rclcpp::spin_some(node_);
+    // rclcpp::spin_some(node_);
     auto status = goal_handle_->get_status();
 
     // Check if the goal is still executing
@@ -221,11 +223,12 @@ protected:
 
     auto future_goal_handle = action_client_->async_send_goal(goal_, send_goal_options);
 
-    if (rclcpp::spin_until_future_complete(node_, future_goal_handle) !=
-      rclcpp::executor::FutureReturnCode::SUCCESS)
-    {
-      throw std::runtime_error("send_goal failed");
-    }
+    // if (rclcpp::spin_until_future_complete(node_, future_goal_handle) !=
+    //   rclcpp::executor::FutureReturnCode::SUCCESS)
+    // {
+    //   throw std::runtime_error("send_goal failed");
+    // }
+    future_goal_handle.wait();
 
     goal_handle_ = future_goal_handle.get();
     if (!goal_handle_) {
@@ -252,7 +255,7 @@ protected:
   typename rclcpp_action::ClientGoalHandle<ActionT>::WrappedResult result_;
 
   // The node that will be used for any ROS operations
-  rclcpp::Node::SharedPtr node_;
+  rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
 };
 
 }  // namespace nav2_behavior_tree

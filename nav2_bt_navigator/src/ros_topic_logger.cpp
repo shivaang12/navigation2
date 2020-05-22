@@ -21,7 +21,7 @@ namespace nav2_bt_navigator
 {
 
 RosTopicLogger::RosTopicLogger(
-  const rclcpp::Node::SharedPtr & ros_node, const BT::Tree & tree)
+  const rclcpp_lifecycle::LifecycleNode::SharedPtr & ros_node, const BT::Tree & tree)
 : StatusChangeLogger(tree.rootNode()), ros_node_(ros_node)
 {
   log_pub_ = ros_node_->create_publisher<nav2_msgs::msg::BehaviorTreeLog>(

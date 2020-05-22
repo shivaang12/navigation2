@@ -25,6 +25,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "behaviortree_cpp_v3/condition_node.h"
 #include "tf2_ros/buffer.h"
+#include "nav2_util/lifecycle_node.hpp"
 
 using namespace std::chrono_literals; // NOLINT
 
@@ -40,7 +41,7 @@ public:
   : BT::ConditionNode(condition_name, conf),
     was_found_(false)
   {
-    node_ = config().blackboard->get<rclcpp::Node::SharedPtr>("node");
+    node_ = config().blackboard->get<rclcpp_lifecycle::LifecycleNode::SharedPtr>("node");
     tf_ = config().blackboard->get<std::shared_ptr<tf2_ros::Buffer>>("tf_buffer");
 
     getInput("child", child_frame_);
@@ -94,7 +95,7 @@ public:
   }
 
 private:
-  rclcpp::Node::SharedPtr node_;
+  rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
   std::shared_ptr<tf2_ros::Buffer> tf_;
 
   std::atomic<bool> was_found_;

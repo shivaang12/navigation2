@@ -25,6 +25,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "behaviortree_cpp_v3/condition_node.h"
 #include "nav_msgs/msg/odometry.hpp"
+#include "nav2_util/lifecycle_node.hpp"
 
 using namespace std::chrono_literals; // NOLINT
 
@@ -43,7 +44,7 @@ public:
     current_accel_(0.0),
     brake_accel_limit_(-10.0)
   {
-    node_ = config().blackboard->get<rclcpp::Node::SharedPtr>("node");
+    node_ = config().blackboard->get<rclcpp_lifecycle::LifecycleNode::SharedPtr>("node");
 
     odom_sub_ = node_->create_subscription<nav_msgs::msg::Odometry>(
       "odom",
@@ -149,7 +150,7 @@ public:
 
 private:
   // The node that will be used for any ROS operations
-  rclcpp::Node::SharedPtr node_;
+  rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
 
   std::atomic<bool> is_stuck_;
 

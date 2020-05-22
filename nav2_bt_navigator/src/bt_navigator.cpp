@@ -80,8 +80,10 @@ BtNavigator::on_configure(const rclcpp_lifecycle::State & /*state*/)
   // Support for handling the topic-based goal pose from rviz
   client_node_ = std::make_shared<rclcpp::Node>("_", options);
 
+  my_node_ = shared_from_this();
+
   self_client_ = rclcpp_action::create_client<nav2_msgs::action::NavigateToPose>(
-    client_node_, "navigate_to_pose");
+    my_node_, "navigate_to_pose");
 
   tf_ = std::make_shared<tf2_ros::Buffer>(get_clock());
   auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
@@ -114,7 +116,7 @@ BtNavigator::on_configure(const rclcpp_lifecycle::State & /*state*/)
   blackboard_ = BT::Blackboard::create();
 
   // Put items on the blackboard
-  blackboard_->set<rclcpp::Node::SharedPtr>("node", client_node_);  // NOLINT
+  blackboard_->set<rclcpp_lifecycle::LifecycleNode::SharedPtr>("node", my_node_);  // NOLINT
   blackboard_->set<std::shared_ptr<tf2_ros::Buffer>>("tf_buffer", tf_);  // NOLINT
   blackboard_->set<std::chrono::milliseconds>("server_timeout", std::chrono::milliseconds(10));  // NOLINT
   blackboard_->set<bool>("path_updated", false);  // NOLINT
@@ -225,7 +227,7 @@ BtNavigator::navigateToPose()
       return action_server_->is_cancel_requested();
     };
 
-  RosTopicLogger topic_logger(client_node_, tree_);
+  RosTopicLogger topic_logger(my_node_, tree_);
   std::shared_ptr<Action::Feedback> feedback_msg = std::make_shared<Action::Feedback>();
 
   auto on_loop = [&]() {

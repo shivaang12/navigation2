@@ -17,9 +17,12 @@
 
 #include <string>
 #include <memory>
+#include <future>
+#include <chrono>
 
 #include "behaviortree_cpp_v3/action_node.h"
 #include "nav2_util/node_utils.hpp"
+#include "nav2_util/lifecycle_node.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 namespace nav2_behavior_tree
@@ -34,7 +37,7 @@ public:
     const BT::NodeConfiguration & conf)
   : BT::SyncActionNode(service_node_name, conf), service_node_name_(service_node_name)
   {
-    node_ = config().blackboard->get<rclcpp::Node::SharedPtr>("node");
+    node_ = config().blackboard->get<rclcpp_lifecycle::LifecycleNode::SharedPtr>("node");
 
     // Get the required items from the blackboard
     server_timeout_ =
@@ -98,13 +101,26 @@ public:
   virtual BT::NodeStatus check_future(
     std::shared_future<typename ServiceT::Response::SharedPtr> future_result)
   {
-    rclcpp::FutureReturnCode rc;
-    rc = rclcpp::spin_until_future_complete(
-      node_,
-      future_result, server_timeout_);
-    if (rc == rclcpp::FutureReturnCode::SUCCESS) {
+    // rclcpp::FutureReturnCode rc;
+    // rc = rclcpp::spin_until_future_complete(
+    //   node_,
+    //   future_result, server_timeout_);
+    // if (rc == rclcpp::FutureReturnCode::SUCCESS) {
+    //   return BT::NodeStatus::SUCCESS;
+    // } else if (rc == rclcpp::FutureReturnCode::TIMEOUT) {
+    //   RCLCPP_WARN(
+    //     node_->get_logger(),
+    //     "Node timed out while executing service call to %s.", service_name_.c_str());
+    //   on_wait_for_result();
+    // }
+
+    std::future_status fs;
+    std::chrono::system_clock::time_point server_time_passed
+        = std::chrono::system_clock::now() + server_timeout_;
+    fs = future_result.wait_until(server_time_passed);
+    if (fs == std::future_status::ready) {
       return BT::NodeStatus::SUCCESS;
-    } else if (rc == rclcpp::FutureReturnCode::TIMEOUT) {
+    } else if (fs == std::future_status::timeout) {
       RCLCPP_WARN(
         node_->get_logger(),
         "Node timed out while executing service call to %s.", service_name_.c_str());
@@ -133,7 +149,7 @@ protected:
   std::shared_ptr<typename ServiceT::Request> request_;
 
   // The node that will be used for any ROS operations
-  rclcpp::Node::SharedPtr node_;
+  rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
 
   // The timeout value while to use in the tick loop while waiting for
   // a result from the server

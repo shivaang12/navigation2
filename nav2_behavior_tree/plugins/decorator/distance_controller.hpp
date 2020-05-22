@@ -20,6 +20,7 @@
 #include <string>
 
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "nav2_util/lifecycle_node.hpp"
 #include "tf2_ros/buffer.h"
 
 #include "behaviortree_cpp_v3/decorator_node.h"
@@ -47,7 +48,7 @@ public:
 private:
   BT::NodeStatus tick() override;
 
-  rclcpp::Node::SharedPtr node_;
+  rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
 
   std::shared_ptr<tf2_ros::Buffer> tf_;
   double transform_tolerance_;

@@ -20,6 +20,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "nav2_msgs/msg/behavior_tree_log.hpp"
 #include "nav2_msgs/msg/behavior_tree_status_change.h"
+#include "nav2_util/lifecycle_node.hpp"
 
 namespace nav2_bt_navigator
 {
@@ -27,7 +28,7 @@ namespace nav2_bt_navigator
 class RosTopicLogger : public BT::StatusChangeLogger
 {
 public:
-  RosTopicLogger(const rclcpp::Node::SharedPtr & ros_node, const BT::Tree & tree);
+  RosTopicLogger(const rclcpp_lifecycle::LifecycleNode::SharedPtr & ros_node, const BT::Tree & tree);
 
   void callback(
     BT::Duration timestamp,
@@ -38,7 +39,7 @@ public:
   void flush() override;
 
 protected:
-  rclcpp::Node::SharedPtr ros_node_;
+  rclcpp_lifecycle::LifecycleNode::SharedPtr ros_node_;
   rclcpp::Publisher<nav2_msgs::msg::BehaviorTreeLog>::SharedPtr log_pub_;
   std::vector<nav2_msgs::msg::BehaviorTreeStatusChange> event_log_;
 };
