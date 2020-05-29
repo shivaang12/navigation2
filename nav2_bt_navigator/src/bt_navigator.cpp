@@ -78,12 +78,16 @@ BtNavigator::on_configure(const rclcpp_lifecycle::State & /*state*/)
       "-r", std::string("__node:=") + get_name() + "_client_node",
       "--"});
   // Support for handling the topic-based goal pose from rviz
-  client_node_ = std::make_shared<rclcpp::Node>("_", options);
+  // client_node_ = std::make_shared<rclcpp::Node>("_", options);
 
   my_node_ = shared_from_this();
 
   self_client_ = rclcpp_action::create_client<nav2_msgs::action::NavigateToPose>(
-    my_node_, "navigate_to_pose");
+    my_node_->get_node_base_interface(),
+    my_node_->get_node_graph_interface(),
+    my_node_->get_node_logging_interface(),
+    my_node_->get_node_waitables_interface(),
+    "navigate_to_pose");
 
   tf_ = std::make_shared<tf2_ros::Buffer>(get_clock());
   auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
@@ -176,7 +180,7 @@ BtNavigator::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
   // TODO(orduno) Fix the race condition between the worker thread ticking the tree
   //              and the main thread resetting the resources, see #1344
   goal_sub_.reset();
-  client_node_.reset();
+  // client_node_.reset();
   self_client_.reset();
 
   // Reset the listener before the buffer

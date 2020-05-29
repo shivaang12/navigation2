@@ -130,7 +130,7 @@ protected:
   rclcpp_action::Client<Action>::SharedPtr self_client_;
 
   // A regular, non-spinning ROS node that we can use for calls to the action client
-  rclcpp::Node::SharedPtr client_node_;
+  // rclcpp::Node::SharedPtr client_node_;
 
   rclcpp_lifecycle::LifecycleNode::SharedPtr my_node_;
 
