@@ -55,13 +55,14 @@ set(dependencies
   nav2_costmap_2d
   nav2_core
   pluginlib
-  ompl
+  tf2
 )
 
 add_library(${library_name} SHARED
   src/ompl_planner.cpp
 )
 
+target_link_libraries(${library_name} ${OMPL_LIBRARIES})
 
 ament_target_dependencies(${library_name}
   ${dependencies}

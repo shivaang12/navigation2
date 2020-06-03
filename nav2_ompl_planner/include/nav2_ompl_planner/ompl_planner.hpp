@@ -56,8 +56,7 @@
 #include "nav2_util/robot_utils.hpp"
 #include "nav2_util/lifecycle_node.hpp"
 #include "nav2_costmap_2d/costmap_2d_ros.hpp"
-#include "nav2_costmap_2d/costmap_subscriber.hpp"
-#include "nav2_costmap_2d/collision_checker.hpp"
+#include "nav2_costmap_2d/footprint_collision_checker.hpp"
 
 namespace nav2_ompl_planner
 {
@@ -98,6 +97,10 @@ public:
   // Waypoint conversion
   geometry_msgs::msg::PoseStamped convertWaypoints(const ompl::base::State & state);
 
+  void initialize();
+
+  double isStateValid(double x, double y, double th);
+
 private:
   // State validity checker
   bool isStateValid(const ompl::base::State * state);
@@ -109,13 +112,11 @@ private:
   nav2_util::LifecycleNode::SharedPtr node_;
 
   // Global Costmap
-  nav2_costmap_2d::Costmap2D * costmap_;
+  // nav2_costmap_2d::Costmap2D * costmap_;
+  std::shared_ptr<nav2_costmap_2d::Costmap2D> costmap_;
 
   //
   std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
-
-  //
-  std::shared_ptr<nav2_costmap_2d::CostmapSubscriber> costmap_sub_;
 
   // The global frame of the costmap
   std::string global_frame_, name_;
@@ -134,6 +135,10 @@ private:
   double collision_checking_resolution_;
 
   std::string planner_name_;
+
+  nav2_costmap_2d::FootprintCollisionChecker collision_checker_;
+
+  bool is_initialized_;
 };
 
 }  // namespace nav2_ompl_planner

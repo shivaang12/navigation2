@@ -45,9 +45,11 @@
 #include "ompl/geometric/planners/prm/PRMstar.h"
 #include "ompl/geometric/planners/prm/LazyPRMstar.h"
 #include "ompl/geometric/planners/rrt/RRTstar.h"
+#include "ompl/geometric/planners/rrt/RRT.h"
 #include "ompl/geometric/planners/rrt/RRTsharp.h"
 #include "ompl/geometric/planners/rrt/RRTXstatic.h"
 #include "ompl/geometric/planners/rrt/InformedRRTstar.h"
+#include "tf2/utils.h"
 
 #include "nav2_ompl_planner/ompl_planner.hpp"
 #include "nav2_util/node_utils.hpp"
@@ -56,7 +58,7 @@ namespace nav2_ompl_planner
 {
 
 OMPLPlanner::OMPLPlanner()
-: tf_(nullptr), node_(nullptr), costmap_(nullptr) {}
+: tf_(nullptr), node_(nullptr), costmap_(nullptr), collision_checker_(nullptr), is_initialized_(false) {}
 
 void OMPLPlanner::configure(
   rclcpp_lifecycle::LifecycleNode::SharedPtr parent,
@@ -66,8 +68,10 @@ void OMPLPlanner::configure(
   node_ = parent;
   tf_ = tf;
   name_ = name;
-  costmap_ = costmap_ros->getCostmap();
+  costmap_ros_ = costmap_ros;
+  costmap_.reset(costmap_ros->getCostmap());
   global_frame_ = costmap_ros->getGlobalFrameID();
+  collision_checker_ = nav2_costmap_2d::FootprintCollisionChecker(costmap_);
 
   // Parameter initialization
   nav2_util::declare_parameter_if_not_declared(
@@ -76,7 +80,7 @@ void OMPLPlanner::configure(
   node_->get_parameter(name_ + ".solve_time", solve_time_);
   nav2_util::declare_parameter_if_not_declared(
     node_, name_ + ".collision_checking_resolution", rclcpp::ParameterValue(
-      0.001));
+      0.0001));
   node_->get_parameter(name_ + ".collision_checking_resolution", collision_checking_resolution_);
   nav2_util::declare_parameter_if_not_declared(
     node_, name_ + ".allow_unknown", rclcpp::ParameterValue(
@@ -84,25 +88,32 @@ void OMPLPlanner::configure(
   node_->get_parameter(name_ + ".allow_unknown", allow_unknown_);
   nav2_util::declare_parameter_if_not_declared(
     node_, name_ + ".planner_name", rclcpp::ParameterValue(
-      "RRTstar"));
+      "RRT"));
   node_->get_parameter(name_ + ".planner_name", planner_name_);
 
   RCLCPP_INFO(
     node_->get_logger(), "Configuring plugin %s of type NavfnPlanner",
     name_.c_str());
+}
 
+void OMPLPlanner::initialize()
+{
   auto bounds = ompl::base::RealVectorBounds(2);
-  bounds.setLow(0, 0.0);
-  bounds.setHigh(0, 1.0);
-  bounds.setLow(1, 0.0);
-  bounds.setHigh(1, 1.0);
+  // bounds.setLow(0, 0.0);
+  // bounds.setHigh(0, 1.0);
+  // bounds.setLow(1, 0.0);
+  // bounds.setHigh(1, 1.0);
+  bounds.setLow(0, costmap_->getOriginX());
+  bounds.setHigh(0, costmap_->getOriginX() + costmap_->getSizeInMetersX());
+  bounds.setLow(1, costmap_->getOriginY());
+  bounds.setHigh(1, costmap_->getOriginY() + costmap_->getSizeInMetersY());
 
-  ompl_state_space_ = std::make_shared<ompl::base::RealVectorStateSpace>(2);
-  ompl_state_space_->as<ompl::base::RealVectorStateSpace>()->setBounds(bounds);
+  ompl_state_space_ = std::make_shared<ompl::base::SE2StateSpace>();
+  ompl_state_space_->as<ompl::base::SE2StateSpace>()->setBounds(bounds);
 
   ss_.reset(new ompl::geometric::SimpleSetup(ompl_state_space_));
   ss_->setStateValidityChecker(
-    [this](const ompl::base::State * state) {
+    [this](const ompl::base::State * state) -> bool {
       return this->isStateValid(state);
     });
   ss_->getSpaceInformation()->setStateValidityCheckingResolution(collision_checking_resolution_);
@@ -111,21 +122,21 @@ void OMPLPlanner::configure(
 void OMPLPlanner::cleanup()
 {
   RCLCPP_INFO(
-    node_->get_logger(), "CleaningUp plugin %s of type NavfnPlanner",
+    node_->get_logger(), "CleaningUp plugin %s of type OMPLPlanner",
     name_.c_str());
 }
 
 void OMPLPlanner::activate()
 {
   RCLCPP_INFO(
-    node_->get_logger(), "Activating plugin %s of type NavfnPlanner",
+    node_->get_logger(), "Activating plugin %s of type OMPLPlanner",
     name_.c_str());
 }
 
 void OMPLPlanner::deactivate()
 {
   RCLCPP_INFO(
-    node_->get_logger(), "Deactivating plugin %s of type NavfnPlanner",
+    node_->get_logger(), "Deactivating plugin %s of type OMPLPlanner",
     name_.c_str());
 }
 
@@ -133,16 +144,30 @@ nav_msgs::msg::Path OMPLPlanner::createPlan(
   const geometry_msgs::msg::PoseStamped & start,
   const geometry_msgs::msg::PoseStamped & goal)
 {
+  RCLCPP_INFO(node_->get_logger(), "Passed init of type OMPLPlanner");
+
+  if(!is_initialized_) {
+    initialize();
+    is_initialized_ = true;
+  }
+
   nav_msgs::msg::Path path;
 
   ompl::base::ScopedState<> ompl_start(ompl_state_space_);
   ompl::base::ScopedState<> ompl_goal(ompl_state_space_);
 
-  ompl_start[0] = (start.pose.position.x - costmap_->getOriginX()) / costmap_->getSizeInMetersX();
-  ompl_start[1] = (start.pose.position.y - costmap_->getOriginY()) / costmap_->getSizeInMetersY();
+  ompl_start[0] = start.pose.position.x;
+  ompl_start[1] = start.pose.position.y;
+  ompl_start[2] = tf2::getYaw(start.pose.orientation);
 
-  ompl_goal[0] = (goal.pose.position.x - costmap_->getOriginX()) / costmap_->getSizeInMetersX();
-  ompl_goal[1] = (goal.pose.position.y - costmap_->getOriginY()) / costmap_->getSizeInMetersY();
+  ompl_goal[0] = goal.pose.position.x;
+  ompl_goal[1] = goal.pose.position.y;
+  ompl_goal[2] = tf2::getYaw(goal.pose.orientation);
+
+
+
+  // auto result = isStateValid(ompl_goal[0], ompl_goal[1], ompl_goal[2]);
+  // RCLCPP_INFO(node_->get_logger(), "THE VALUE IS %f", result);
 
   ss_->setStartAndGoalStates(ompl_start, ompl_goal);
 
@@ -158,6 +183,8 @@ nav_msgs::msg::Path OMPLPlanner::createPlan(
     setPlanner<ompl::geometric::RRTXstatic>();
   } else if (planner_name_ == "InformedRRTstar") {
     setPlanner<ompl::geometric::InformedRRTstar>();
+  } else if (planner_name_ == "RRT") {
+    setPlanner<ompl::geometric::RRT>();
   } else {
     setPlanner<ompl::geometric::RRTstar>();
   }
@@ -166,19 +193,24 @@ nav_msgs::msg::Path OMPLPlanner::createPlan(
 
   if (ss_->solve(solve_time_)) {
     RCLCPP_INFO(node_->get_logger(), "Path found!");
+    // ss_->simplifySolution(max_simplification_time_);
     auto solution_path = ss_->getSolutionPath();
     path.poses.clear();
     path.header.stamp = node_->now();
     path.header.frame_id = global_frame_;
     // Increasing number of path points
     int min_num_states = round(solution_path.length() / costmap_->getResolution());
+    RCLCPP_INFO(node_->get_logger(), "MIN NUM OF STATE %d", min_num_states);
+    RCLCPP_INFO(node_->get_logger(), "SOLUTION PATH LENGTH %f", solution_path.length());
+    RCLCPP_INFO(node_->get_logger(), "COSTMAP RESOLUTION %f", costmap_->getResolution());
     solution_path.interpolate(min_num_states);
 
     path.poses.reserve(solution_path.getStates().size());
     for (const auto ptr : solution_path.getStates()) {
       path.poses.push_back(convertWaypoints(*ptr));
     }
-    path.poses[path.poses.size() - 1] = goal;
+    // path.poses[path.poses.size() - 1] = goal;
+    RCLCPP_INFO(node_->get_logger(), "Path SIZE IS %d", path.poses.size());
   } else {
     RCLCPP_ERROR(node_->get_logger(), "Path not found!");
   }
@@ -192,13 +224,13 @@ geometry_msgs::msg::PoseStamped OMPLPlanner::convertWaypoints(const ompl::base::
   ss = state;
 
   geometry_msgs::msg::PoseStamped pose;
-  pose.pose.position.x = ss[0] * costmap_->getSizeInMetersX() + costmap_->getOriginX();
-  pose.pose.position.y = ss[1] * costmap_->getSizeInMetersY() + costmap_->getOriginY();
+  pose.pose.position.x = ss[0];
+  pose.pose.position.y = ss[1];
   pose.pose.position.z = 0.0;
   pose.pose.orientation.x = 0.0;
   pose.pose.orientation.y = 0.0;
-  pose.pose.orientation.z = 0.0;
-  pose.pose.orientation.w = 1.0;
+  pose.pose.orientation.z = std::sin(0.5 * ss[2]);
+  pose.pose.orientation.w = std::cos(0.5 * ss[2]);
 
   return pose;
 }
@@ -211,21 +243,41 @@ bool OMPLPlanner::isStateValid(const ompl::base::State * state)
 
   ompl::base::ScopedState<> ss(ompl_state_space_);
   ss = state;
-  unsigned int mx, my;
-  double x, y;
-  x = ss[0] * costmap_->getSizeInMetersX() + costmap_->getOriginX();
-  y = ss[1] * costmap_->getSizeInMetersY() + costmap_->getOriginY();
-  costmap_->worldToMap(x, y, mx, my);
+  // unsigned int mx, my;
+  double x, y, th;
+  x = ss[0];
+  y = ss[1];
+  th = ss[2];
+  // costmap_->worldToMap(x, y, mx, my);
 
-  auto cost = costmap_->getCost(mx, my);
-  if (cost == nav2_costmap_2d::LETHAL_OBSTACLE ||
-    cost == nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE ||
-    ( !allow_unknown_ && cost == nav2_costmap_2d::NO_INFORMATION))
+  // auto cost = costmap_->getCost(mx, my);
+  auto cost = collision_checker_.footprintCostAtPose(x, y, th, costmap_ros_->getRobotFootprint());
+  // RCLCPP_INFO(node_->get_logger(), "COST IS %d", cost);
+  if (cost > 252)
   {
     return false;
   }
 
   return true;
+}
+
+double OMPLPlanner::isStateValid(double x, double y, double th)
+{
+  // x = ss[0];
+  // y = ss[1];
+  // th = ss[2];
+  // costmap_->worldToMap(x, y, mx, my);
+
+  // auto cost = costmap_->getCost(mx, my);
+  auto cost = collision_checker_.footprintCostAtPose(x, y, th, costmap_ros_->getRobotFootprint());
+  return cost;
+  // RCLCPP_INFO(node_->get_logger(), "COST IS %d", cost);
+  // if (cost > 253)
+  // {
+  //   return false;
+  // }
+
+  // return true;
 }
 
 }  // namespace nav2_ompl_planner
