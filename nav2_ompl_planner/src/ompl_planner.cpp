@@ -39,6 +39,8 @@
 #include <string>
 #include <memory>
 #include <cmath>
+#include <fstream>
+#include <chrono>
 
 #include "ompl/base/spaces/RealVectorBounds.h"
 #include "ompl/base/spaces/SE2StateSpace.h"
@@ -49,6 +51,9 @@
 #include "ompl/geometric/planners/rrt/RRTsharp.h"
 #include "ompl/geometric/planners/rrt/RRTXstatic.h"
 #include "ompl/geometric/planners/rrt/InformedRRTstar.h"
+#include "ompl/geometric/planners/rrt/TRRT.h"
+#include "ompl/geometric/planners/rrt/BiTRRT.h"
+#include "ompl/base/terminationconditions/CostConvergenceTerminationCondition.h"
 #include "tf2/utils.h"
 
 #include "nav2_ompl_planner/ompl_planner.hpp"
@@ -88,7 +93,7 @@ void OMPLPlanner::configure(
   node_->get_parameter(name_ + ".allow_unknown", allow_unknown_);
   nav2_util::declare_parameter_if_not_declared(
     node_, name_ + ".planner_name", rclcpp::ParameterValue(
-      "RRT"));
+      "RRTstar"));
   node_->get_parameter(name_ + ".planner_name", planner_name_);
 
   RCLCPP_INFO(
@@ -144,6 +149,7 @@ nav_msgs::msg::Path OMPLPlanner::createPlan(
   const geometry_msgs::msg::PoseStamped & start,
   const geometry_msgs::msg::PoseStamped & goal)
 {
+  auto start_time = std::chrono::high_resolution_clock::now();
   RCLCPP_INFO(node_->get_logger(), "Passed init of type OMPLPlanner");
 
   if(!is_initialized_) {
@@ -171,27 +177,32 @@ nav_msgs::msg::Path OMPLPlanner::createPlan(
 
   ss_->setStartAndGoalStates(ompl_start, ompl_goal);
 
-  if (planner_name_ == "RRTstar") {
-    setPlanner<ompl::geometric::RRTstar>();
-  } else if (planner_name_ == "LazyPRMstar") {
-    setPlanner<ompl::geometric::LazyPRMstar>();
-  } else if (planner_name_ == "PRMstar") {
-    setPlanner<ompl::geometric::PRMstar>();
-  } else if (planner_name_ == "RRTsharp") {
-    setPlanner<ompl::geometric::RRTsharp>();
-  } else if (planner_name_ == "RRTXstatic") {
-    setPlanner<ompl::geometric::RRTXstatic>();
-  } else if (planner_name_ == "InformedRRTstar") {
-    setPlanner<ompl::geometric::InformedRRTstar>();
-  } else if (planner_name_ == "RRT") {
-    setPlanner<ompl::geometric::RRT>();
-  } else {
-    setPlanner<ompl::geometric::RRTstar>();
-  }
+  // if (planner_name_ == "RRTstar") {
+  //   setPlanner<ompl::geometric::RRTstar>();
+  // } else if (planner_name_ == "LazyPRMstar") {
+  //   setPlanner<ompl::geometric::LazyPRMstar>();
+  // } else if (planner_name_ == "PRMstar") {
+  //   setPlanner<ompl::geometric::PRMstar>();
+  // } else if (planner_name_ == "RRTsharp") {
+  //   setPlanner<ompl::geometric::RRTsharp>();
+  // } else if (planner_name_ == "RRTXstatic") {
+  //   setPlanner<ompl::geometric::RRTXstatic>();
+  // } else if (planner_name_ == "InformedRRTstar") {
+  //   setPlanner<ompl::geometric::InformedRRTstar>();
+  // } else if (planner_name_ == "RRT") {
+  //   setPlanner<ompl::geometric::RRT>();
+  // } else {
+  //   setPlanner<ompl::geometric::RRTstar>();
+  // }
 
+  setPlanner<ompl::geometric::RRTstar>();
+
+
+  auto problemDef = ss_->getProblemDefinition();
+  auto cct = ompl::base::CostConvergenceTerminationCondition(problemDef, 1, 1);
   ss_->setup();
 
-  if (ss_->solve(solve_time_)) {
+  if (ss_->solve(cct)) {
     RCLCPP_INFO(node_->get_logger(), "Path found!");
     // ss_->simplifySolution(max_simplification_time_);
     auto solution_path = ss_->getSolutionPath();
@@ -214,6 +225,12 @@ nav_msgs::msg::Path OMPLPlanner::createPlan(
   } else {
     RCLCPP_ERROR(node_->get_logger(), "Path not found!");
   }
+  auto stop_time = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop_time - start_time);
+  std::ofstream file("time.txt", std::ios_base::app);
+  file << std::to_string(duration.count()) << '\n';
+  file.close();
+
 
   return path;
 }

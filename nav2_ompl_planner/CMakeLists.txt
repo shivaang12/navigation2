@@ -35,7 +35,7 @@ find_package(ompl REQUIRED)
 
 include_directories(
   include
-  ${OMPL_INCLUDE_DIRS}
+  # ${OMPL_INCLUDE_DIRS}
 )
 
 set(library_name ${PROJECT_NAME}_plugin)
@@ -56,13 +56,12 @@ set(dependencies
   nav2_core
   pluginlib
   tf2
+  OMPL
 )
 
 add_library(${library_name} SHARED
   src/ompl_planner.cpp
 )
-
-target_link_libraries(${library_name} ${OMPL_LIBRARIES})
 
 ament_target_dependencies(${library_name}
   ${dependencies}

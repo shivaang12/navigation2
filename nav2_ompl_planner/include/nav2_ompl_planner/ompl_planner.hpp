@@ -41,6 +41,7 @@
 
 #include <string>
 #include <memory>
+#include <type_traits>
 
 #include "ompl/base/State.h"
 #include "ompl/base/StateSpace.h"
